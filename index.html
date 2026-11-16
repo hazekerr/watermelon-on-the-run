@@ -1752,7 +1752,7 @@ var ENDINGS={
   duo:{title:'Вдвоём',over:function(){return 'На трассе М-6 их было двое: арбуз и дыня.';},
     steps:function(){return endSteps(['Дыня не отстала. Она бежала рядом всю дорогу, и ни разу не пожаловалась.','Они вместе выкатились на трассу. Дальнобойщик сигналил им в знак приветствия.','Это был уже не побег. Это было путешествие.'],['happy','happy','happy'],{bright:true});}},
   cut:{title:'Нарезан на дольки',over:function(d){return 'Продавец догнал тебя на '+d+'-м метре.';},
-    steps:function(){return endSteps(['Нож блеснул под лампой. Рынок получил своё.','Через минуту от арбуза остался сладкий запах и липкая лужа.','Город снова сказал спасибо жаре.'],['panic','dead','dead'],{mod:function(s){s[0].gap=1.2;s[1].gap=1.2;s[2].gap=1.6;}});}}
+    steps:function(){return endSteps(['Нож блеснул под лампой. Рынок получил своё.','Через минуту от арбуза остался сладкий запах и липкая лужа.','Город снова сказал спасибо жаре.'],['panic','dead','dead'],{mod:function(s){s[0].gap=2.6;s[1].gap=2.6;s[2].gap=3;s[0].cam=[4,2,-6,0,1,1.5];s[0].cam2=[2.8,1.6,-4,0,1,1.5];s[1].cam=[1.6,.9,-2.2,0,.35,.8];s[1].cam2=[1.1,.75,-1.6,0,.3,.8];s[2].cam=[0,3.5,-7,0,.8,1.5];s[2].cam2=[0,8,-14,0,0,1];}});}}
 };
 function introSteps(){return [
   {d:3.4,cam:[7,2.6,10,0,1.2,0],cam2:[4.5,2,7,0,1.1,0],pose:'idle',text:'Астрахань. +41 в тени. Рынок закрывается.',gap:20},
@@ -2591,7 +2591,7 @@ function step(dt){
   gazMesh.visible=gazT>0&&state==='play';gazMesh.position.set(player.x,player.y,player.z);
   for(var cri=0;cri<cracks.length;cri++){cracks[cri].visible=Math.max(deeds.hits,Math.floor(heat*3.2))>cri;}
   if(state==='cine'){cinePose();}else{bodyPivot.position.x=0;halves.visible=false;}
-  melon.visible=player.inv>0?(Math.floor(time*20)%2===0):true;
+  melon.visible=(state==='cine'&&cineOv.pose==='dead')?false:player.inv>0?(Math.floor(time*20)%2===0):true;
   boatMesh.visible=boatMode&&state!=='menu';boatMesh.position.set(player.x,-.05+Math.sin(time*3)*.03,player.z);boatMesh.rotation.z=Math.sin(time*2)*.04;
   blob.scale.setScalar(clamp(1-player.y*.18,.4,1));
 
