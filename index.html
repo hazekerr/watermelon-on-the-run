@@ -340,7 +340,7 @@ var scene=new THREE.Scene();
 scene.background=new THREE.Color(0x6a4a3c);
 scene.fog=new THREE.Fog(0x7a5a48,20,95);
 var camera=new THREE.PerspectiveCamera(58,1,0.1,320);
-var hemi=new THREE.HemisphereLight(0xc9a58c,0x2a3a44,0.55);
+var hemi=new THREE.HemisphereLight(0xd8b8a0,0x3a4a56,0.8);
 scene.add(hemi);
 var sunLight=new THREE.DirectionalLight(0xffb48a,1.0);
 sunLight.position.set(-8,14,6);
@@ -755,6 +755,45 @@ function ghost(g,x,z){
   m.position.set(x,rand(1.5,3.2),z);g.add(m);
   (g.userData.gulls=g.userData.gulls||[]).push({m:m,a:new THREE.Group(),b:new THREE.Group(),t:Math.random()*6,x:x,z:z,r:rand(1,3)});
 }
+function mergeStatic(root){
+  root.updateMatrixWorld(true);
+  var skip=[];(root.userData.gulls||[]).forEach(function(u){skip.push(u.m);});
+  var list=[];
+  root.traverse(function(o){
+    if(!o.isMesh)return;
+    for(var p=o.parent;p&&p!==root;p=p.parent){if(skip.indexOf(p)>=0)return;}
+    list.push(o);
+  });
+  var buckets=new Map();
+  list.forEach(function(o){var k=o.material.uuid;if(!buckets.has(k))buckets.set(k,{mat:o.material,items:[]});buckets.get(k).items.push(o);});
+  var inv=new THREE.Matrix4().copy(root.matrixWorld).invert(),v=new THREE.Vector3();
+  buckets.forEach(function(b){
+    var pos=[],nor=[],uv=[],idx=[],off=0;
+    b.items.forEach(function(o){
+      var g=o.geometry,m=new THREE.Matrix4().multiplyMatrices(inv,o.matrixWorld),nm=new THREE.Matrix3().getNormalMatrix(m);
+      var P=g.attributes.position,N=g.attributes.normal,U=g.attributes.uv,i,wu=!!b.mat.map&&!b.mat.transparent,vn=new THREE.Vector3(),ox=o.matrixWorld.elements[12],oz=o.matrixWorld.elements[14];
+      for(i=0;i<P.count;i++){
+        v.fromBufferAttribute(P,i).applyMatrix4(m);pos.push(v.x,v.y,v.z);
+        if(N){vn.fromBufferAttribute(N,i).applyMatrix3(nm).normalize();nor.push(vn.x,vn.y,vn.z);}else{vn.set(0,1,0);nor.push(0,1,0);}
+        if(wu){
+          var ax=Math.abs(vn.x),ay=Math.abs(vn.y),az=Math.abs(vn.z),wx=v.x+root.position.x,wy=v.y,wz=v.z+root.position.z;
+          if(ay>=ax&&ay>=az)uv.push(wx/5,wz/5);else if(ax>=az)uv.push(wz/5,wy/5);else uv.push(wx/5,wy/5);
+        }else if(U)uv.push(U.getX(i),U.getY(i));else uv.push(0,0);
+      }
+      if(g.index){for(i=0;i<g.index.count;i++)idx.push(g.index.getX(i)+off);}else{for(i=0;i<P.count;i++)idx.push(i+off);}
+      off+=P.count;
+    });
+    var geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+    geo.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));
+    geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+    geo.setIndex(off>65535?new THREE.Uint32BufferAttribute(idx,1):new THREE.Uint16BufferAttribute(idx,1));
+    var mesh=new THREE.Mesh(geo,b.mat);mesh.castShadow=true;mesh.receiveShadow=true;mesh.userData.merged=true;
+    root.add(mesh);
+    b.items.forEach(function(o){if(o.parent)o.parent.remove(o);});
+  });
+}
+function disposeChunk(c){c.traverse(function(o){if(o.userData&&o.userData.merged&&o.geometry)o.geometry.dispose();});}
 function buildChunk(i){
   var g=new THREE.Group();g.position.z=-i*CHUNK;g.userData.z0=-i*CHUNK;
   var si=stageIndex(i*CHUNK+CHUNK/2);
@@ -799,6 +838,7 @@ function buildChunk(i){
     arch(g,-1);arch(g,-13);
     if(Math.random()<.5)boat(g,(Math.random()<.5?-1:1)*(12+rand(0,8)),-rand(4,20));
   }
+  mergeStatic(g);
   scene.add(g);chunks.push(g);
 }
 
@@ -901,14 +941,15 @@ function addObstacle(kind,lane,z){
   m.position.set(LANE_X[lane],0,z);scene.add(m);
   obstacles.push({kind:kind,x:LANE_X[lane],z:z,m:m,y0:kind==='over'?.95:0,h:kind==='tall'?2.6:kind==='over'?1.75:.85,depth:kind==='tall'?1.2:kind==='over'?.9:1.1,dead:false,fly:null});
 }
+var seedCoreMat=new THREE.MeshLambertMaterial({color:0x1a1412}),seedRingMat=new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.BackSide});
 function spawnSeed(x,y,z){
   for(var oi2=0;oi2<obstacles.length;oi2++){
     var o=obstacles[oi2];
     if(Math.abs(o.x-x)<1.1&&Math.abs(o.z-z)<o.depth/2+.5&&y<o.h+.3&&y>o.y0-.3)return;
   }
   var g=new THREE.Group();
-  var core=new THREE.Mesh(sphGeo,new THREE.MeshLambertMaterial({color:0x1a1412}));core.scale.set(.13,.22,.09);
-  var ring=new THREE.Mesh(sphGeo,new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.BackSide}));ring.scale.set(.18,.29,.14);
+  var core=new THREE.Mesh(sphGeo,seedCoreMat);core.scale.set(.13,.22,.09);
+  var ring=new THREE.Mesh(sphGeo,seedRingMat);ring.scale.set(.18,.29,.14);
   g.add(ring);g.add(core);g.position.set(x,y,z);scene.add(g);
   seedsArr.push({m:g,x:x,y:y,z:z,t:Math.random()*6});
 }
@@ -999,7 +1040,7 @@ var stats={jumps:0,dodged:0,secret:false,pups:0,girl:false},heat=0;
 var shoutT=0,shoutHide=0,qte=null,photoPrev='play',photoAng=0,quoteIdx=0;
 
 function resetWorld(){
-  chunks.forEach(function(c){scene.remove(c);});chunks.length=0;nextChunk=0;
+  chunks.forEach(function(c){scene.remove(c);disposeChunk(c);});chunks.length=0;nextChunk=0;
   obstacles.forEach(function(o){scene.remove(o.m);});obstacles.length=0;
   throwers.forEach(function(t){scene.remove(t.m);});throwers.length=0;
   projs.forEach(function(p){scene.remove(p.m);});projs.length=0;
@@ -1166,10 +1207,11 @@ function knock(ob){
   burst(ob.x,.6,ob.z,[0xb8a58a,0x6a5e4e],8,3,.12);beep(110,.18,'square',.08,-60);
   if(!knockHint){knockHint=true;toast('Подкат сбивает горожан',1800);}
 }
+var projMat=new THREE.MeshBasicMaterial({color:0xfff0e0}),projGlowMat=new THREE.SpriteMaterial({map:glowTex,color:0xff3030,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.9});
 function fireProj(th,tgt){
-  var m=new THREE.Group(),bright=new THREE.MeshBasicMaterial({color:0xfff0e0});
+  var m=new THREE.Group(),bright=projMat;
   box(bright,1.0,.2,.26,0,0,0,m);box(bright,.26,.36,.1,-.58,0,0,m);
-  var gs=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:0xff3030,blending:THREE.AdditiveBlending,depthWrite:false,transparent:true,opacity:.9}));
+  var gs=new THREE.Sprite(projGlowMat);
   gs.scale.set(3,3,1);m.add(gs);
   m.position.set(th.x,th.y+1.45,th.z);scene.add(m);
   projs.push({m:m,x:th.x,y:th.y+1.1,z:th.z,vx:(tgt>th.x?1:-1)*11,life:1.3,tr:0});
@@ -1431,7 +1473,7 @@ stage.addEventListener('pointerup',function(e){
 function toggleMute(){muted=!muted;$('#mute').textContent='Звук: '+(muted?'выкл':'вкл');}
 $('#mute').addEventListener('click',function(e){e.stopPropagation();audio();toggleMute();});
 $('#gfx').addEventListener('click',function(e){
-  e.stopPropagation();hiGfx=!hiGfx;this.textContent='Графика: '+(hiGfx?'макс':'мин');
+  e.stopPropagation();hiGfx=!hiGfx;this.textContent='Графика: '+(hiGfx?'макс':'мин');sunLight.castShadow=hiGfx&&qLevel<3;
   renderer.setPixelRatio(hiGfx?Math.min(window.devicePixelRatio||1,1.75):1);resize();
 });
 $('#toMenu').addEventListener('click',function(){
@@ -2482,7 +2524,7 @@ function step(dt){
   lightT-=dt;
   if(rainK>.85&&lightT<=0){lightK=1;lightT=rand(3,8);setTimeout(function(){beep(55,1,'sawtooth',.14,-20);},350+Math.random()*300);}
   lightK*=Math.exp(-8*dt);
-  hemi.intensity=(.55+lightK*2.4)*(1-.55*nightK);sunLight.intensity=1.0*(1-.7*nightK);
+  hemi.intensity=(.8+lightK*2.4)*(1-.55*nightK);sunLight.intensity=1.0*(1-.7*nightK);
   skyU.cH.value.copy(env.fog).lerp(WHITE,lightK*.5);
   skyU.cT.value.copy(env.sky).multiplyScalar(.6).lerp(WHITE,lightK*.4);
   updateRain(dt,rainK);
@@ -2490,7 +2532,7 @@ function step(dt){
 
   while(nextChunk*CHUNK<d+130){buildChunk(nextChunk++);}
   for(var ci=chunks.length-1;ci>=0;ci--){
-    if(chunks[ci].userData.z0-CHUNK>player.z+14){scene.remove(chunks[ci]);chunks.splice(ci,1);}
+    if(chunks[ci].userData.z0-CHUNK>player.z+14){scene.remove(chunks[ci]);disposeChunk(chunks[ci]);chunks.splice(ci,1);}
   }
 
   if(state==='play'){
@@ -2629,9 +2671,24 @@ function step(dt){
 setVendorLook();resetWorld();applySkin();applyAcc();refreshMenu();
 var last=performance.now();
 var errN=0;
+var qLevel=0,fpsEma=16,qT=0;
+function setQuality(q){
+  qLevel=q;
+  if(q>=1){renderer.setPixelRatio(1);resize();$('#gfx').textContent='Графика: авто';}
+  if(q>=2)hiGfx=false;
+  if(q>=2){sunLight.shadow.mapSize.set(1024,1024);if(sunLight.shadow.map){sunLight.shadow.map.dispose();sunLight.shadow.map=null;}}
+  if(q>=3){sunLight.castShadow=false;}
+}
+if(/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent))setQuality(2);
 function frame(now){
   requestAnimationFrame(frame);
-  var dt=Math.min(.05,(now-last)/1000);last=now;
+  var raw=(now-last)/1000;
+  var dt=Math.min(.05,raw);last=now;
+  if(raw<.25&&!document.hidden&&(state==='play')){
+    fpsEma+=(raw*1000-fpsEma)*.05;qT+=raw;
+    if(qT>2.5&&qLevel<3&&fpsEma>24){qT=0;fpsEma=16;setQuality(qLevel+1);toast('Графика снижена для плавности',2000);}
+    else if(qT>2.5)qT=0;
+  }
   if(document.hidden)return;
   try{step(state==='photo'||state==='revive'?0:dt);}
   catch(e){if(errN++<3){toast('Ошибка: '+(e&&e.message||e),6000);}}
