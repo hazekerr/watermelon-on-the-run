@@ -897,7 +897,7 @@ function boatObs(kind){
   return g;
 }
 function addObstacle(kind,lane,z){
-  var m=boat&&kind!=='over'?boatObs(kind):kind==='tall'?makeStall():kind==='over'?makeOverPipe():makeKnifeBoard();
+  var m=boatMode&&kind!=='over'?boatObs(kind):kind==='tall'?makeStall():kind==='over'?makeOverPipe():makeKnifeBoard();
   m.position.set(LANE_X[lane],0,z);scene.add(m);
   obstacles.push({kind:kind,x:LANE_X[lane],z:z,m:m,y0:kind==='over'?.95:0,h:kind==='tall'?2.6:kind==='over'?1.75:.85,depth:kind==='tall'?1.2:kind==='over'?.9:1.1,dead:false,fly:null});
 }
@@ -972,6 +972,7 @@ function musicTick(d){
   mus.master.gain.value=musVol;
   var inten=state==='play'?((rhythm||heist)?.6:clamp(d/FINISH,0,1)):.1;
   if(state==='cine'&&cine&&cine.bright)inten=0;
+  if(enc&&state==='play')inten=Math.max(inten,.8);
   var bpm=rhythm&&state==='play'?112:84+inten*56,step16=60/bpm/4;
   while(mus.next<actx.currentTime+.25){
     var t=mus.next,b=mus.beat,bar=Math.floor(b/16)%4,root=[0,0,-2,1][bar];
@@ -982,6 +983,7 @@ function musicTick(d){
       var sc=SCALE[(b*3+bar*2)%7];
       tone(dfreq(root+sc+12),t,step16*3,'triangle',.04,mus.master);
     }
+    if(enc&&state==='play'&&b%8===4){tone(dfreq(root-24),t,step16*3,'sawtooth',.06,mus.master);}
     if(inten>.7&&b%4===0){tone(dfreq(root+24+SCALE[bar*2%7]),t,step16*1.5,'square',.018,mus.master);}
     mus.next+=step16;mus.beat++;
   }
@@ -1040,7 +1042,7 @@ function applyEnv(d0){
 }
 var wx={type:'clear',from:0,to:0,k:0},sec={d:0,placed:false,used:false,start:0,end:0,k:0},hatches=[];
 var halloween=false;
-var COL_NIGHT=new THREE.Color(0x0a1022),COL_NIGHT2=new THREE.Color(0x101830);
+var COL_NIGHT=new THREE.Color(0x0a1022),COL_NIGHT2=new THREE.Color(0x101830),COL_DAY=new THREE.Color(0x86c8ec),COL_DAYF=new THREE.Color(0xa6d4e8);
 var COL_SAND=new THREE.Color(0xb88a55),COL_SANDSKY=new THREE.Color(0x9a7048),COL_HEAT=new THREE.Color(0xe3b36a),COL_CAVE=new THREE.Color(0x1c130c),COL_CAVEF=new THREE.Color(0x2a1b10),COL_HALL=new THREE.Color(0x3a2050),COL_HALLS=new THREE.Color(0x2a1838);
 function envExtras(d){
   wx.k=wx.type==='clear'?0:clamp((d-wx.from)/80,0,1)*clamp((wx.to-d)/80,0,1);
@@ -1056,6 +1058,7 @@ function envExtras(d){
     env.sky.lerp(COL_CAVE,sec.k);env.fog.lerp(COL_CAVEF,sec.k);env.water.lerp(COL_CAVE,sec.k);env.right.lerp(COL_CAVE,sec.k);
     rainK*=1-sec.k;nearK=lerp(nearK,8,sec.k);farK=lerp(farK,58,sec.k);
   }
+  if(boatMode){env.sky.lerp(COL_DAY,.9);env.fog.lerp(COL_DAYF,.85);env.water.lerp(COL_DAY,.5);rainK=0;}
   if(nightK>.01){env.sky.lerp(COL_NIGHT,nightK*.85);env.fog.lerp(COL_NIGHT2,nightK*.8);env.water.lerp(COL_NIGHT,nightK*.6);env.right.lerp(COL_NIGHT,nightK*.6);nearK=lerp(nearK,10,nightK);farK=lerp(farK,70,nightK);}
   scene.fog.near=nearK;scene.fog.far=farK;
   $('#haze').style.opacity=String(wx.type==='heat'?wx.k:0);
@@ -1261,13 +1264,13 @@ function spawnRow(z){
   var hz=Math.random();
   if(calmT>0){hz=1;}
   if(nightK>.4&&Math.random()<.3){for(var nq=0;nq<5;nq++){spawnSeed(LANE_X[free],.7,z-4-nq*1.0);}}
-  if(!boat&&d>150&&!enc&&!quest&&!questNpc&&d>questCool&&Math.random()<.03){var qs=pick([-1,1]);spawnQuestNpc(qs*4.9,z-4);}
+  if(!boatMode&&d>150&&!enc&&!quest&&!questNpc&&d>questCool&&Math.random()<.03){var qs=pick([-1,1]);spawnQuestNpc(qs*4.9,z-4);}
   if(d>200&&Math.random()<.05*(has('c4')?2:1)&&pickFind()){spawnPup('find',LANE_X[(free+1+((Math.random()*2)|0))%3],z-5);}
-  if(boat){if(d>200&&hz<.3)addHazard('oil',pick([0,1,2]),z-rand(8,18));}
+  if(boatMode){if(d>200&&hz<.3)addHazard('oil',pick([0,1,2]),z-rand(8,18));}
   else if(d>300&&hz<.1+.08*f){addHazard('dog',pick([0,1,2]),z-rand(8,18));}
   else if(d>700&&hz<.17+.1*f){addHazard('moto',pick([0,1,2]),z-rand(10,20));}
   else if(d>200&&hz<.26+.08*f){addHazard('oil',pick([0,1,2]),z-rand(8,18));}
-  if(d>120&&Math.random()<.08){spawnPup(pick(['shield','dash','freeze','cat','net']),LANE_X[free],z-3);}
+  if(d>120&&Math.random()<.08){spawnPup(pick(['shield','dash','freeze','cat','net','gaz']),LANE_X[free],z-3);}
   if(!sec.placed&&d>sec.d){sec.placed=true;placeHatch(LANE_X[free],z-8);}
   if(!endless&&!stats.girlSpawned&&d>1900){stats.girlSpawned=true;spawnPup('girl',LANE_X[free],z-3);}
 }
@@ -1317,6 +1320,7 @@ function toast(text,ms){
 }
 function hit(ob){
   if(player.inv>0)return;
+  if(gazT>0){ob.dead=true;ob.fly={vx:rand(-4,4),vy:8,vz:-6,rot:rand(-6,6),t:1.1};shake=.5;seeds+=1;burst(player.x,1,player.z,[0xe8dcc0,0xffffff],10,4,.14);beep(120,.2,'square',.09,-40);return;}
   if(heist){seeds=Math.max(0,seeds-8);player.inv=1.2;shake=.6;flash=1;slow=.6;ob.dead=true;burst(player.x,1,player.z,[0xffcf5a,0xffffff],12,4,.1);beep(160,.25,'sawtooth',.09,-80);toast('Уронил семечки: −8',1000);return;}
   if(shieldT>0){
     shieldT=0;player.inv=1;ob.dead=true;shake=.5;
@@ -1341,7 +1345,7 @@ function end(kind){
   $('#bossBar').hidden=true;enc=null;$('#rhy').hidden=true;$('#heistT').hidden=true;quest=null;
   var firstTime=false;
   if(!endless){firstTime=SAVE.endings.indexOf(endingId)<0;if(firstTime)SAVE.endings.push(endingId);}
-  var bk=rhythm?'bestRhythm':heist?'bestHeist':boat?'bestBoat':endless?'bestEndless':'best';
+  var bk=rhythm?'bestRhythm':heist?'bestHeist':boatMode?'bestBoat':endless?'bestEndless':'best';
   var best=Math.max(SAVE[bk]||0,score);SAVE[bk]=best;
   SAVE.bestDist=Math.max(SAVE.bestDist,Math.floor(d));
   SAVE.bank+=Math.round((seeds+(kind==='win'&&!endless?50:0))*(has('c3')?1.5:1));SAVE.runs++;
@@ -1358,7 +1362,7 @@ function end(kind){
   $('#endQuote').textContent=kind==='over'?pick(QUOTES):'';
   $('#endStats').textContent=(rhythm?'Ритм · Комбо: '+combo+' · ':endless?'Бесконечный · ':'')+'Семечек: '+seeds+' · Сбито: '+deeds.knock+' · Ударов: '+deeds.hits+' · Счёт: '+score+' · Рекорд: '+best+(endless?'':' · Концовки: '+SAVE.endings.length+'/'+ENDING_IDS.length+(firstTime?' · новая!':''));
   endTimer=kind==='win'?1.2:1;endShown=false;
-  if(heist||boat){
+  if(heist||boatMode){
     endShown=true;
     $('#endTitle').textContent=heist?'Рынок ограблен':'Река закончилась';
     $('#endText').textContent=heist?'За минуту ты унёс '+seeds+' семечек. Продавцы ещё долго считали убытки.':(kind==='win'?'':'Лодка не доплыла: на '+Math.floor(d)+'-м метре тебя догнали.');
@@ -1373,7 +1377,7 @@ function end(kind){
 function modeArg(){return curMode==='endless'?true:curMode==='story'?false:curMode;}
 function startRun(m){
   curMode=(m==='rhythm'||m==='heist'||m==='boat')?m:m===true?'endless':'story';
-  rhythm=curMode==='rhythm';heist=curMode==='heist';boat=curMode==='boat';endless=curMode!=='story';
+  rhythm=curMode==='rhythm';heist=curMode==='heist';boatMode=curMode==='boat';endless=curMode!=='story';
   audio();resetWorld();
   gap=vm().startGap||8;seeds=0;speed=rhythm?16:heist?14:7;heistT=60;nextBoatCar=220;slow=1;shake=0;flash=0;endShown=true;
   $('#menu').hidden=true;$('#end').hidden=true;
@@ -1388,7 +1392,7 @@ function startRun(m){
       $('#rhy').hidden=false;
     }
     if(heist){$('#heistT').hidden=false;}
-    toast(heist?'Ограбление! Собирай семечки, 60 секунд':boat?'Волга. Брёвна и катера, держись реки':rhythm?'Режим «Ритм». Не попадай под удар, держи комбо':endless?'Бесконечный забег. Беги, пока можешь':'Беги. ↑ прыжок · ↓ подкат',2600);
+    toast(heist?'Ограбление! Собирай семечки, 60 секунд':boatMode?'Волга. Брёвна и катера, держись реки':rhythm?'Режим «Ритм». Не попадай под удар, держи комбо':endless?'Бесконечный забег. Беги, пока можешь':'Беги. ↑ прыжок · ↓ подкат',2600);
   };
   if(curMode==='story'){cineStart((introSeen?[]:introSteps()).concat([choiceStep()]),go);introSeen=true;}
   else{go();}
@@ -1431,7 +1435,7 @@ $('#gfx').addEventListener('click',function(e){
   renderer.setPixelRatio(hiGfx?Math.min(window.devicePixelRatio||1,1.75):1);resize();
 });
 $('#toMenu').addEventListener('click',function(){
-  rhythm=heist=boat=false;resetWorld();state='menu';$('#end').hidden=true;$('#rhy').hidden=true;$('#menu').hidden=false;refreshMenu();$('#go').focus();
+  rhythm=heist=boatMode=false;resetWorld();state='menu';$('#end').hidden=true;$('#rhy').hidden=true;$('#menu').hidden=false;refreshMenu();$('#go').focus();
 });
 $('#go').addEventListener('click',function(){startRun(false);});
 $('#goRhythm').addEventListener('click',function(){startRun('rhythm');});
@@ -1458,7 +1462,8 @@ function updateHud(d){
   var danger=clamp(1-(gap-1)/8.5,0,1);
   hudEls.vend.style.width=(danger*100).toFixed(0)+'%';
   setT(hudEls.vtxt,gap>6?'далеко':gap>3.5?'близко':'дышит в спину');
-  hudEls.box.classList.toggle('hot',gap<3.5&&state==='play');
+  hudEls.box.classList.toggle('hot',gap<3.5&&state==='play'&&!heist);
+  hudEls.box.style.display=heist?'none':'';
   hudEls.vig.style.opacity=String(Math.max(clamp((4.5-gap)/3.5,0,1)*.7,flash*.9));
 }
 
@@ -1853,7 +1858,7 @@ function forkTick(d){
 
 /* ---------- power-ups and extra hazards ---------- */
 var pups=[],shieldT=0,dashT=0,freezeT=0;
-var PUP={shield:{col:0x5ad0ff,name:'Щит',t:10},dash:{col:0xffc23a,name:'Рывок',t:3.5},freeze:{col:0xc7a6ff,name:'Полдень',t:6},cat:{col:0xff9a3a,name:'Кот',t:14},net:{col:0x6ad6c8,name:'Сеть',t:0},girl:{col:0xf2d65a,name:'Дыня',t:0},find:{col:0xff5acd,name:'Находка',t:0}};
+var PUP={shield:{col:0x5ad0ff,name:'Щит',t:10},dash:{col:0xffc23a,name:'Рывок',t:3.5},freeze:{col:0xc7a6ff,name:'Полдень',t:6},cat:{col:0xff9a3a,name:'Кот',t:14},net:{col:0x6ad6c8,name:'Сеть',t:0},girl:{col:0xf2d65a,name:'Дыня',t:0},find:{col:0xff5acd,name:'Находка',t:0},gaz:{col:0xe8e6de,name:'Газель',t:9}};
 var shieldMesh=new THREE.Mesh(new THREE.SphereGeometry(.95,20,14),new THREE.MeshBasicMaterial({color:0x5ad0ff,transparent:true,opacity:.22,depthWrite:false}));
 shieldMesh.visible=false;scene.add(shieldMesh);
 function spawnPup(kind,x,z){
@@ -1870,6 +1875,7 @@ function takePup(p){
   if(k==='shield')shieldT=def.t;else if(k==='dash'){dashT=def.t;player.inv=Math.max(player.inv,def.t);}
   else if(k==='freeze')freezeT=def.t;
   else if(k==='cat')catT=def.t;
+  else if(k==='gaz'){gazT=def.t;player.inv=Math.max(player.inv,.8);beep(240,.25,'square',.08,0);setTimeout(function(){beep(240,.25,'square',.08,0);},300);}
   else if(k==='net'){
     for(var oi=obstacles.length-1;oi>=0;oi--){
       var ob=obstacles[oi];
@@ -1880,7 +1886,7 @@ function takePup(p){
     for(var ti=throwers.length-1;ti>=0;ti--){if(throwers[ti].z<player.z&&throwers[ti].z>player.z-50){scene.remove(throwers[ti].m);throwers.splice(ti,1);}}
   }
   else if(k==='girl'){comp=true;stats.girl=true;}
-  toast(def.name+(k==='freeze'?': город замер от жары':k==='shield'?': один удар не страшен':k==='dash'?': ничто не остановит':k==='cat'?': кот показывает путь':k==='net'?': рыбак закинул сеть':': береги её'),2000);
+  toast(def.name+(k==='freeze'?': город замер от жары':k==='shield'?': один удар не страшен':k==='dash'?': ничто не остановит':k==='cat'?': кот показывает путь':k==='net'?': рыбак закинул сеть':k==='gaz'?': едешь на «Газели», всё сносишь':': береги её'),2000);
   burst(p.x,1,p.z,[def.col,0xffffff],12,3.5,.12);beep(660,.25,'triangle',.06,500);
 }
 function updPups(dt){
@@ -1901,6 +1907,7 @@ function updPups(dt){
   if(dashT>0)h+='<span style="color:#ffc23a">Рывок '+Math.ceil(dashT)+'</span>';
   if(catT>0)h+='<span style="color:#ff9a3a">Кот '+Math.ceil(catT)+'</span>';
   if(comp)h+='<span style="color:#f2d65a">Дыня рядом</span>';
+  if(gazT>0)h+='<span style="color:#e8e6de">Газель '+Math.ceil(gazT)+'</span>';
   if(freezeT>0)h+='<span style="color:#c7a6ff">Полдень '+Math.ceil(freezeT)+'</span>';
   if(quest)h+='<span style="color:#f0b840">'+quest.text+': '+Math.min(quest.goal,Math.floor(quest.prog))+'/'+quest.goal+'</span>';
   if(calmT>0)h+='<span style="color:#9ad0a0">Укрытие '+Math.ceil(calmT)+'</span>';
@@ -1977,7 +1984,7 @@ function bossTick(d){
 }
 /* ---------- v10: modes, quests, allies, secrets, events ---------- */
 var radioT=0,nextEvent=450,catT=0,comp=false,compMesh=null,catMesh=null,catMark=null,rowsInfo=[],heatToast=false,wxAnnounced=false;
-function enemyK(){return (calmT>0||heist||boat)?0:routeEnemyK*(radioT>0?1.6:1);}
+function enemyK(){return (calmT>0||heist||boatMode)?0:routeEnemyK*(radioT>0?1.6:1);}
 var SHOUTS=['Ну ты и арбуз!','Держи его!','Это мой арбуз!','Сколько стоит?','Дайте нож!','Стой, закуска!','Не убежишь, сладкий!','Тридцать рублей кило!'];
 var QUOTES=['«Я же говорил: не убежишь.»','«Сладкий был. Жаль.»','«Покупатель ждёт.»','«Тебя в холодильник, и на весы.»','«Арбуз, ты зелёный, а я голодный.»','«Скидка тридцать процентов на дольки!»','«Мякоть не обманешь.»','«В Астрахани арбузы не бегают.»'];
 function shout(who,t){var e=$('#shout');e.innerHTML='<small>'+who+'</small>«'+t+'»';e.classList.add('on');shoutHide=2.4;}
@@ -2160,11 +2167,12 @@ function eventTick(d){
   }else{radioT=14;toast('По рации: «Держите арбуз!»',2400);}
 }
 /* ---------- v12: bosses, quests, finds, rhythm, choices, revive, night, top-down ---------- */
-var curMode='story',rhythm=false,heist=false,boat=false,heistT=60,nextBoatCar=200;
+var gazT=0,curMode='story',rhythm=false,heist=false,boatMode=false,heistT=60,nextBoatCar=200;
 var sched=[],enc=null,encPlan=[],encIdx=0,quest=null,questNpc=null,questCool=0,nightK=0,nightAnn=false,topK=0,topAnn=false,calmT=0;
 var combo=0,rhythmScore=0,hitSinceRow=false,revives=0,reviveTimer=0,noRevive=false;
 var choiceLog={c1:null,c2:null,c3:null},bossIntroDone=false,startShield=false,startGapBonus=0,startSeedBonus=0,bossReward=0;
 var BS=60/112;
+var gazMesh=(function(){var g=makeBossCar(0xe8e6de,false);g.rotation.y=Math.PI;g.scale.setScalar(.8);var w=new THREE.Group();w.add(g);w.visible=false;scene.add(w);return w;})();
 var boatMesh=(function(){var g=new THREE.Group();g.visible=false;
   box(mc(0x8a5a30,{roughness:.8}),1.5,.35,2.6,0,.12,0,g);box(mc(0xf0e8d8),1.3,.12,2.3,0,.34,0,g);box(mc(0xc0382c),1.52,.1,2.62,0,.3,0,g);
   var pr=box(mc(0x8a5a30),1.0,.3,.8,0,.18,-1.6,g);pr.rotation.x=.4;
@@ -2175,7 +2183,7 @@ function schedAt(t,fn){sched.push({t:t,fn:fn});}
 function runSched(){for(var i=sched.length-1;i>=0;i--){if(sched[i]&&time>=sched[i].t){var f=sched[i].fn;sched.splice(i,1);f();}}}
 function nightAt(d){return clamp((Math.sin(d/420-1.2)+.35)*1.2,0,1);}
 function inTop(d){
-  if(rhythm||heist||boat)return false;
+  if(rhythm||heist||boatMode)return false;
   if(!endless)return (d>1250&&d<1350)||(d>2000&&d<2100);
   var m=d%1200;return m>800&&m<900;
 }
@@ -2244,7 +2252,7 @@ var waveFn={
 };
 function buildEncPlan(){
   encPlan=[];encIdx=0;
-  if(rhythm||heist||boat)return;
+  if(rhythm||heist||boatMode)return;
   if(!endless){encPlan=[{id:'butcher',d:330},{id:'fisher',d:900},{id:'cats',d:1620},{id:'crane',d:2050},{id:'dog',d:2400}];return;}
   var ids=['butcher','fisher','cats','crane','dog'];
   for(var lap=0;lap<40;lap++){for(var k=0;k<5;k++)encPlan.push({id:ids[k],d:500+lap*1700+k*320});}
@@ -2418,8 +2426,11 @@ function resetV12(){
   quest=null;questCool=0;nightK=0;nightAnn=false;topK=0;topAnn=false;calmT=0;
   combo=0;rhythmScore=0;hitSinceRow=false;revives=0;noRevive=false;
   choiceLog={c1:null,c2:null,c3:null};bossIntroDone=false;startShield=false;startGapBonus=0;startSeedBonus=0;bossReward=0;
-  player.dj=false;heistT=60;$('#bribe').hidden=true;
-  road.material.color.set(boat?0x5aa0c0:0xffffff);
+  gazT=0;player.dj=false;heistT=60;$('#bribe').hidden=true;
+  var rm=road.material;
+  if(!rm.userData.o)rm.userData.o={map:rm.map,bump:rm.bumpMap,rough:rm.roughnessMap,r:rm.roughness,m:rm.metalness};
+  rm.map=boatMode?null:rm.userData.o.map;rm.bumpMap=boatMode?null:rm.userData.o.bump;rm.roughnessMap=boatMode?null:rm.userData.o.rough;
+  rm.roughness=boatMode?.12:rm.userData.o.r;rm.metalness=boatMode?.35:rm.userData.o.m;rm.color.set(boatMode?0x2f9bd2:0xffffff);rm.needsUpdate=true;
 }
 /* ---------- main step ---------- */
 
@@ -2430,12 +2441,13 @@ function step(dt){
 
   if(state==='play'){
     slow+=(1-slow)*Math.min(1,dt*1.4);
-    speed+=(speedAt(d)*(vm().speed||1)*slow*routeSpeedK*(dashT>0?1.3:1)-speed)*(1-Math.exp(-3*dt));
+    speed+=(speedAt(d)*(vm().speed||1)*slow*routeSpeedK*(dashT>0||gazT>0?1.3:1)-speed)*(1-Math.exp(-3*dt));
     gap=Math.min(9.5,gap+dt*.28*(1-.45*heat)*(vm().regen||1)*(has('d3')?1.15:1));
     if(qte){qte.t-=dt;if(qte.t<=0){qteEnd(false);}}
     shoutHide-=dt;if(shoutHide<=0)$('#shout').classList.remove('on');
     radioT=Math.max(0,radioT-dt);
     player.inv=Math.max(0,player.inv-dt);
+    gazT=Math.max(0,gazT-dt);
   }else if(state==='menu'){speed=5;}
   else if(state==='cine'){speed+=(cineOv.speed-speed)*Math.min(1,dt*3);cineStep(dt);}
   else{speed*=Math.exp(-2.5*dt);}
@@ -2452,7 +2464,7 @@ function step(dt){
   slideK+=((player.slide>0?1:0)-slideK)*Math.min(1,dt*14);
   if(player.slide>0&&player.onGround&&Math.random()<.5){burst(player.x,.1,player.z+.3,[0x9a8a72,0x6a5e4e],1,1.5,.1);}
 
-  var ntg=(state==='play'&&!rhythm&&!heist&&!boat)?nightAt(d):0;nightK+=(ntg-nightK)*Math.min(1,dt*.8);
+  var ntg=(state==='play'&&!rhythm&&!heist&&!boatMode)?nightAt(d):0;nightK+=(ntg-nightK)*Math.min(1,dt*.8);
   var si=applyEnv(d);
   if(state==='play'&&si!==stageIdx){stageIdx=si;toast(STAGES[si].name+(STAGE_LINES[si]?'. '+STAGE_LINES[si]:''),3400);if(si>=2)setTimeout(startQte,1800);}
 
@@ -2492,7 +2504,7 @@ function step(dt){
     if(heist){
       heistT-=dt;$('#heistT').textContent='⏱ '+Math.max(0,Math.ceil(heistT))+' с · семечек '+seeds;
       if(heistT<=0)end('win');
-    }else if(boat){
+    }else if(boatMode){
       if(d>nextBoatCar){nextBoatCar=d+rand(170,260);var bl=(Math.random()*3)|0;spawnCar(bl,makeBossCar(0xd8d8d0,false),15,false);toast('Встречный катер!',1400);beep(220,.4,'square',.06,0);}
       questTick(d);
     }else if(!rhythm){
@@ -2575,11 +2587,12 @@ function step(dt){
   bodyPivot.rotation.x=-.12+slideK*1.0;
   bodyPivot.rotation.z=-(tx-player.x)*.1;
   sweatDrop.position.y=.38-((time*1.6)%1)*.5;
-  melon.position.set(player.x,player.y,player.z);
+  melon.position.set(player.x,player.y+(gazT>0?1.15:0),player.z);
+  gazMesh.visible=gazT>0&&state==='play';gazMesh.position.set(player.x,player.y,player.z);
   for(var cri=0;cri<cracks.length;cri++){cracks[cri].visible=Math.max(deeds.hits,Math.floor(heat*3.2))>cri;}
   if(state==='cine'){cinePose();}else{bodyPivot.position.x=0;halves.visible=false;}
   melon.visible=player.inv>0?(Math.floor(time*20)%2===0):true;
-  boatMesh.visible=boat&&state!=='menu';boatMesh.position.set(player.x,-.05+Math.sin(time*3)*.03,player.z);boatMesh.rotation.z=Math.sin(time*2)*.04;
+  boatMesh.visible=boatMode&&state!=='menu';boatMesh.position.set(player.x,-.05+Math.sin(time*3)*.03,player.z);boatMesh.rotation.z=Math.sin(time*2)*.04;
   blob.scale.setScalar(clamp(1-player.y*.18,.4,1));
 
   /* vendor */
@@ -2615,10 +2628,14 @@ function step(dt){
 (function(){var dn=new Date(),auto=(dn.getMonth()===9&&dn.getDate()>=20)||(dn.getMonth()===10&&dn.getDate()<=3);halloween=SAVE.hall===null||SAVE.hall===undefined?auto:!!SAVE.hall;})();
 setVendorLook();resetWorld();applySkin();applyAcc();refreshMenu();
 var last=performance.now();
+var errN=0;
 function frame(now){
-  var dt=Math.min(.05,(now-last)/1000);last=now;
-  if(!document.hidden){step(state==='photo'||state==='revive'?0:dt);renderer.render(scene,camera);}
   requestAnimationFrame(frame);
+  var dt=Math.min(.05,(now-last)/1000);last=now;
+  if(document.hidden)return;
+  try{step(state==='photo'||state==='revive'?0:dt);}
+  catch(e){if(errN++<3){toast('Ошибка: '+(e&&e.message||e),6000);}}
+  try{renderer.render(scene,camera);}catch(e2){}
 }
 requestAnimationFrame(frame);
 setTimeout(function(){var b=$('#go');if(b)b.focus();},50);
